@@ -1,103 +1,62 @@
 class PayloadParser:
-    def parse_payload(self, payload, gamestate_manager):
-        change_flags = {}
-        # Parse round information
-        if 'round' in payload and 'phase' in payload['round']:
-            roundchanged = False
-            if payload['round']['phase'] != gamestate_manager.gamestate.round_phase:
-                gamestate_manager.gamestate.update_round_phase(payload['round']['phase'])
-                roundchanged = True
-            if payload['round']['phase'] != 'live' and not roundchanged:
-                return None
+    def __init__(self, gamestate_manager):
+        self.gamestate_manager = gamestate_manager
+        self.gamestate_changes = None
+
+    def parse_payload(self, payload):
+        self.gamestate_changes = {}
+
+        # Parse round information from payload
+        if 'round' in payload:
+            self.parse_round_info(payload['round'])
 
         # Parse map information
         if 'map' in payload:
-            map_info = payload['map']
-            if 'mode' in map_info:
-                gamestate_manager.gamestate.map.mode = map_info['mode']
-            if 'name' in map_info:
-                gamestate_manager.gamestate.map.name = map_info['name']
-            if 'phase' in map_info:
-                gamestate_manager.gamestate.map.phase = map_info['phase']
-            if 'round' in map_info:
-                gamestate_manager.gamestate.map.round = map_info['round']
-                
-            if 'team_ct' in map_info:
-                ct_info = map_info['team_ct']
-                if 'score' in ct_info:
-                    gamestate_manager.gamestate.map.team_ct.score = ct_info['score']
-                if 'timeouts_remaining' in ct_info:
-                    gamestate_manager.gamestate.map.team_ct.timeouts_remaining = ct_info['timeouts_remaining']
-                if 'matches_won_this_series' in ct_info:
-                    gamestate_manager.gamestate.map.team_ct.matches_won_this_series = ct_info['matches_won_this_series']
+            self.parse_map_info(payload['map'])
 
-            if 'team_t' in map_info:
-                t_info = map_info['team_t']
-                if 'score' in t_info:
-                    gamestate_manager.gamestate.map.team_t.score = t_info['score']
-                if 'timeouts_remaining' in t_info:
-                    gamestate_manager.gamestate.map.team_t.timeouts_remaining = t_info['timeouts_remaining']
-                if 'matches_won_this_series' in t_info:
-                    gamestate_manager.gamestate.map.team_t.matches_won_this_series = t_info['matches_won_this_series']
+        # Parse player informations
 
-            if 'num_matches_to_win_series' in map_info:
-                gamestate_manager.gamestate.map.num_matches_to_win_series = map_info['num_matches_to_win_series']
-            if 'current_spectators' in map_info:
-                gamestate_manager.gamestate.map.current_spectators = map_info['current_spectators']
-            if 'souvenirs_total' in map_info:
-                gamestate_manager.gamestate.map.souvenirs_total = map_info['souvenirs_total']
+        # Pass game state changes to game state manager, if any
+        if self.gamestate_changes:
+            self.gamestate_manager.update_gamestate(self.gamestate_changes)
 
-        # Parse player information
-        if 'player' in payload:
-            player_info = payload['player']
-            if 'steamid' in player_info:
-                gamestate_manager.gamestate.player.steamid = player_info['steamid']
-            if 'name' in player_info:
-                gamestate_manager.gamestate.player.name = player_info['name']
-            if 'observer_slot' in player_info:
-                gamestate_manager.gamestate.player.observer_slot = player_info['observer_slot']
-            if 'activity' in player_info:
-                gamestate_manager.gamestate.player.activity = player_info['activity']
+    def parse_round_info(self, round_info):
+        # Parse bomb information
+        # bomb                  ; "planted", "exploded", or "defused"
+        if 'bomb' in round_info:
+            if self.gamestate_manager.gamestate.round.bomb != round_info['bomb']:
+                self.gamestate_changes['bomb'] = round_info['bomb']
+        else:
+            self.gamestate_manager.gamestate.round.bomb = ''
+        
+        # Parse win information
+        # win_team              ; "CT" or "T"
+        if 'win_team' in round_info:
+            if not self.gamestate_manager.gamestate.round.win_team:
+                self.gamestate_changes['win_team'] = round_info['win_team']
+        else:
+            self.gamestate_manager.gamestate.round.win_team = ''
 
-            if 'state' in player_info:
-                state_info = player_info['state']
-                if 'health' in state_info:
-                    gamestate_manager.gamestate.player.state.health = state_info['health']
-                if 'armor' in state_info:
-                    gamestate_manager.gamestate.player.state.armor = state_info['armor']
-                if 'helmet' in state_info:
-                    gamestate_manager.gamestate.player.state.helmet = state_info['helmet']
-                if 'flashed' in state_info:
-                    gamestate_manager.gamestate.player.state.flashed = state_info['flashed']
-                if 'smoked' in state_info:
-                    gamestate_manager.gamestate.player.state.smoked = state_info['smoked']
-                if 'burning' in state_info:
-                    gamestate_manager.gamestate.player.state.burning = state_info['burning']
-                if 'money' in state_info:
-                    gamestate_manager.gamestate.player.state.money = state_info['money']
-                if 'round_kills' in state_info:
-                    kills = int(state_info['round_kills'])
-                    if gamestate_manager.gamestate.player.state.round_kills != kills:
-                        gamestate_manager.gamestate.update_round_kills(kills)
-                if 'round_killhs' in state_info:
-                    gamestate_manager.gamestate.player.state.round_killhs = state_info['round_killhs']
-                if 'equip_value' in state_info:
-                    gamestate_manager.gamestate.player.state.equip_value = state_info['equip_value']
+        # Parse phase information
+        # phase                 ; "live", "freezetime", "over" (maybe "warmup", others?)
+        if 'phase' in round_info:
+            if round_info['phase'] != self.gamestate_manager.gamestate.round.phase:
+                self.gamestate_changes['round_phase'] = round_info['phase']
 
-            if 'weapons' in player_info:
-                gamestate_manager.gamestate.player.weapons = player_info['weapons']
-                if player_info['weapons'] != gamestate_manager.gamestate.player.weapons:
-                    gamestate_manager.gamestate.player.weapons = player_info['weapons']
+    def parse_map_info(self, map_info):
+        # Parse team scores
+        # - team_ct
+        #         - score         ; int, current team score
+        if 'team_ct' in map_info:
+            if 'score' in map_info['team_ct']:
+                self.gamestate_manager.gamestate.map.team_ct_score = map_info['team_ct']['score']
+        # - team_t
+        #         - score         ; int, current team score
+        if 'team_t' in map_info:
+            if 'score' in map_info['team_t']:
+                self.gamestate_manager.gamestate.map.team_t_score = map_info['team_t']['score']
 
-            if 'match_stats' in player_info:
-                match_stats = player_info['match_stats']
-                if 'kills' in match_stats:
-                    gamestate_manager.gamestate.player.match_stats.kills = match_stats['kills']
-                if 'assists' in match_stats:
-                    gamestate_manager.gamestate.player.match_stats.assists = match_stats['assists']
-                if 'deaths' in match_stats:
-                    gamestate_manager.gamestate.player.match_stats.deaths = match_stats['deaths']
-                if 'mvps' in match_stats:
-                    gamestate_manager.gamestate.player.match_stats.mvps = match_stats['mvps']
-                if 'score' in match_stats:
-                    gamestate_manager.gamestate.player.match_stats.score = match_stats['score']
+        # Parse round number
+        # round                 ; int, current round number
+        if 'round' in map_info:
+            self.gamestate_manager.gamestate.map.round = map_info['round']

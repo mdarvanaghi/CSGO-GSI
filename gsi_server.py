@@ -3,19 +3,19 @@ import time
 import json
 import logger
 import payloadparser
-import gamestate
+import gamestatemanager
 import provider
 
 class GSIServer(HTTPServer):
     def __init__(self, server_address, token, RequestHandler):
         self.provider = provider.Provider()
         self.auth_token = token
-        self.gamestatemanager = gamestate.GameStateManager()
+        self.gamestate_manager = gamestatemanager.GameStateManager()
 
         super(GSIServer, self).__init__(server_address, RequestHandler)
 
         self.setup_log_file()
-        self.payload_parser = payloadparser.PayloadParser()
+        self.payload_parser = payloadparser.PayloadParser(self.gamestate_manager)
 
     def setup_log_file(self):
         self.log_file = logger.LogFile(time.asctime())
@@ -31,7 +31,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             return None
         
         self.server.log_file.log_event(time.asctime(), payload)
-        self.server.payload_parser.parse_payload(payload, self.server.gamestatemanager)
+        self.server.payload_parser.parse_payload(payload)
 
         self.send_header('Content-type', 'text/html')
         self.send_response(200)
@@ -43,39 +43,13 @@ class RequestHandler(BaseHTTPRequestHandler):
         else:
             return False
 
-    def parse_payload(self, payload):
-
-        self.server.log_file.log_event(time.asctime(), payload)
-
-        # round_phase = self.get_round_phase(payload)
-        
-
-        # if round_phase != self.server.round_phase:
-        #     self.server.round_phase = round_phase
-        #     print('New round phase: %s' % round_phase)
-
-    def get_round_phase(self, payload):
-        if 'round' in payload and 'phase' in payload['round']:
-            return payload['round']['phase']
-        else:
-            return None
-
-    def get_kill(self, payload):
-        if 'player' in payload and 'state' in payload['player'] and 'rounds_kills' in payload['player']['state']:
-                return payload['player']['rounds_kills']
-        else:
-            return None
-
     def log_message(self, format, *args):
-        """
-        Prevents requests from printing into the console
-        """
+        # Prevents requests from printing into the console
         return
-
 
 server = GSIServer(('localhost', 3000), 'MYTOKENHERE', RequestHandler)
 
-print(time.asctime(), '-', 'CS:GO GSI server starting')
+print(time.asctime() + ' - ' + 'CS:GO GSI server starting\n')
 
 try:
     server.serve_forever()
@@ -83,4 +57,4 @@ except (KeyboardInterrupt, SystemExit):
     pass
 
 server.server_close()
-print(time.asctime(), '-', 'CS:GO GSI server stopped')
+print(time.asctime() + ' - ' + 'CS:GO GSI server stopped')
